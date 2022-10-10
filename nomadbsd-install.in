@@ -115,12 +115,64 @@ exclfind() {
 		'\(' -type f -or -type d -or -type l -or -type p '\)' -and -not $args
 }
 
-getrootdev()
+get_ufs_rootdev()
 {
 	local rootdev
 	rootdev=$(df / | tail -n 1 | awk '{ sub("/dev/", "", $1); print $1 }')
 	glabel status | grep $rootdev | awk -F" " '{ print $3 }' | \
 		sed -E 's/(.*)[sp][0-9][a-z]*/\1/'
+}
+
+get_zfs_rootdev()
+{
+	local cmd="zpool list -H -v"
+	local pool=$(mount -p | awk '$2 == "/" {print $1}')
+	local device=$(${cmd} | awk -v pool=${pool} -F"[\t ]+" '
+		BEGIN {
+			pool_pattern = sprintf("^%s[[:space:]]+", pool);
+			found_pool = 0
+		}
+		{
+			if (/^[^[:space:]]/) {
+				if ($0 ~ pool_pattern)
+					found_pool = 1
+				else
+					found_pool = 0
+			} else if (found_pool) {
+				if ($0 ~ /^[[:space:]]+[^[:space:]]+/) {
+					print($2); exit(0)
+				}
+			}
+		}
+	')
+	[ -z "${device}" ] && return
+	device=$(echo ${device} | sed -E 's#^/+dev/+(.*)$#\1#')
+	if (echo ${device} | egrep -q '^(gpt|label|gptid)'); then
+		disk_dev=$(glabel status | awk -v label=${device} -F"[\t ]+" '
+			BEGIN {
+				pattern = sprintf("^[[:space:]]+%s[[:space:]]", label);
+			}
+			$0 ~ pattern {
+				print($NF); exit(0)
+			}
+		')
+		[ -z "${disk_dev}" ] && return
+		device=${disk_dev}
+	fi
+	echo ${device} | sed -E	's#([a-zA-Z0-9]+)[sp]([0-9]{1,})[a-f]?$#\1#'
+}
+
+root_is_zfs()
+{
+	[ $(mount -p | awk '$2 == "/" {print $3}') = "zfs" ]
+}
+
+getrootdev()
+{
+	if root_is_zfs; then
+		get_zfs_rootdev
+	else
+		get_ufs_rootdev
 }
 
 devlist() {
