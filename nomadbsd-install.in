@@ -32,6 +32,7 @@ rootfs_label="nbsdrootfs"
 swap_label="nbsdswap"
 POOL="zroot"
 NOMADBSDROOT="${POOL}/ROOT/nomadbsd-${version}"
+PATH_SDDM_AUTOLOGIN="${DESTDIR}/usr/local/etc/sddm.conf.d/autologin.conf"
 
 fstab_ufs() {
 cat <<FSTAB_END
@@ -46,6 +47,15 @@ cat <<FSTAB_END
 tmpfs                    /tmp  tmpfs  rw,mode=1777,late 0 0
 proc                     /proc procfs rw                0 0
 FSTAB_END
+}
+
+sddm_autologin_file() {
+	local username=$1
+	cat << SDDM_AUTOLOGIN_END
+[Autologin]
+User=${username}
+Session=xinitrc
+SDDM_AUTOLOGIN_END
 }
 
 cleanup() {
@@ -410,7 +420,20 @@ part_disk() {
 	mkrootfs ${disk} ${idx}
 }
 
-set_autologin() {
+sddm_enabled() {
+	[ $(sysrc -n sddm_enable) = "YES" ]
+}
+
+set_sddm_autologin() {
+	if [ ${autologin:=0} -eq 1 ]; then
+		mkdir -p "$(dirname "${PATH_SDDM_AUTOLOGIN}")"
+		sddm_autologin_file ${username} > "${PATH_SDDM_AUTOLOGIN}"
+	else
+		rm -f "${PATH_SDDM_AUTOLOGIN}"
+	fi
+}
+
+set_slim_autologin() {
 	path_slim="${DESTDIR}/usr/local/etc/slim.conf"
 	awk -v user=$username -v autologin=${autologin:=0} '
 		! /^default_user/ && ! /^auto_login/ {
@@ -423,6 +446,14 @@ set_autologin() {
 		}
 	}' < $path_slim > $path_slim.tmp
 	mv $path_slim.tmp $path_slim
+}
+
+set_autologin() {
+	if sddm_enabled; then
+		set_sddm_autologin
+	else
+		set_slim_autologin
+	fi
 }
 
 pkgwrp() {
