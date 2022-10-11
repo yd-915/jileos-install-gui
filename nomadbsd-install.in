@@ -173,6 +173,7 @@ getrootdev()
 		get_zfs_rootdev
 	else
 		get_ufs_rootdev
+	fi
 }
 
 devlist() {
