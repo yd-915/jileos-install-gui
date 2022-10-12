@@ -136,7 +136,7 @@ get_ufs_rootdev()
 get_zfs_rootdev()
 {
 	local cmd="zpool list -H -v"
-	local pool=$(mount -p | awk '$2 == "/" {print $1}')
+	local pool=$(mount -p | awk '$2 == "/" {print $1}' | cut -d/ -f1)
 	local device=$(${cmd} | awk -v pool=${pool} -F"[\t ]+" '
 		BEGIN {
 			pool_pattern = sprintf("^%s[[:space:]]+", pool);
