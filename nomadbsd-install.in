@@ -31,7 +31,6 @@ DESTDIR="/tmp/nbsdinstaller.$$"
 rootfs_label="nbsdrootfs"
 swap_label="nbsdswap"
 POOL="zroot"
-NOMADBSDROOT="${POOL}/ROOT/nomadbsd-${version}"
 PATH_SDDM_AUTOLOGIN="${DESTDIR}/usr/local/etc/sddm.conf.d/autologin.conf"
 
 fstab_ufs() {
@@ -267,12 +266,15 @@ zfs_create() {
 }
 
 mkzfs() {
-	zpool create -o altroot=${DESTDIR} -m none -f ${POOL} $1 || \
+	zpool create -o altroot=${DESTDIR} ${POOL} $1 || \
 		bail "Couldn't create pool ${POOL}"
 	zfs set compress=on ${POOL}
 	zfs set atime=off ${POOL}
 	zfs_create -o mountpoint=none ${POOL}/ROOT
-	zfs_create -o mountpoint=/ ${NOMADBSDROOT}
+	zfs_create -o mountpoint=none ${POOL}/ROOT/default
+
+	mount -t zfs ${POOL}/ROOT/default ${DESTDIR}
+
 	zfs_create -o canmount=off -o mountpoint=/usr ${POOL}/usr
 	zfs_create  ${POOL}/usr/home
 	zfs_create -o exec=off -o setuid=off ${POOL}/usr/src
@@ -290,10 +292,10 @@ mkzfs() {
 	zfs_create -o atime=on -o exec=off -o setuid=off \
 		${POOL}/var/mail
 	zfs_create -o exec=on -o setuid=off   ${POOL}/var/tmp
-	ln -s usr/home ${DESTDIR}/home
-	ln -s usr/src/sys ${DESTDIR}/sys
+	ln -s /usr/home ${DESTDIR}/home
+	ln -s /usr/src/sys ${DESTDIR}/sys
 	chmod 1777 ${DESTDIR}/var/tmp
-	zpool set bootfs=${NOMADBSDROOT} ${POOL}
+	zpool set bootfs=${POOL}/ROOT/default ${POOL}
 }
 
 wipe_disk() {
@@ -515,10 +517,10 @@ replace_user() {
 
 	status "Counting config files ..."
 	progress -1
-	nfiles=$(find ${DESTDIR}/home/nomad/ -type f -exec file {} \; | grep text | wc -l)
+	nfiles=$(find ${DESTDIR}/usr/home/nomad/ -type f -exec file {} \; | grep text | wc -l)
 
 	status "Replacing nomad by ${username} in config files ..."
-	find ${DESTDIR}/home/nomad/ -type f | while read i; do
+	find ${DESTDIR}/usr/home/nomad/ -type f | while read i; do
 		if (file "$i" | grep -q text); then
 			n=$(($n + 1))
 			p=$(($n * 100 / $nfiles))
@@ -528,8 +530,8 @@ replace_user() {
 	done
 	sed -i '' -E "s/[[:<:]]nomad[[:>:]]/${username}/g" \
 		${DESTDIR}/usr/local/etc/sudoers
-	status "Moving ${DESTDIR}/home/nomad to ${DESTDIR}/home/$username ..."
-	mv ${DESTDIR}/home/nomad ${DESTDIR}/home/${username}
+	status "Moving ${DESTDIR}/usr/home/nomad to ${DESTDIR}/usr/home/$username ..."
+	mv ${DESTDIR}/usr/home/nomad ${DESTDIR}/usr/home/${username}
 	status "Running pwd_mkdb on /etc/master.passwd ..."
 	chroot ${DESTDIR} sh -c '/usr/sbin/pwd_mkdb -p /etc/master.passwd'
 }
@@ -540,20 +542,29 @@ copy_home() {
 	/data/*
 	*/.gvfs.*
 	"
-	if [ ! -d ${DESTDIR}/home ]; then
-		mkdir ${DESTDIR}/home || bail "Couldn't create ${DESTDIR}/home"
+	if [ ! -d ${DESTDIR}/usr/home ]; then
+		mkdir ${DESTDIR}/usr/home || \
+			bail "Couldn't create ${DESTDIR}/usr/home"
 	fi
-	homedir="/data/home"
+	if [ ! -L ${DESTDIR}/home ]; then
+		rm -rf ${DESTDIR}/home
+		ln -s /usr/home ${DESTDIR}/home
+	fi
+	if [ -d "/data/home" ]; then
+		homedir="/data/home"
+	else
+		homedir="/home"
+	fi
 	status "Counting files to copy from ${homedir} ..."
 	progress -1
 	nfiles=$(cd ${homedir} && echo "${exlst}" | \
 			exclfind . 2>/dev/null | wc -l | tr -d ' ')
 	status "Copying files from ${homedir} ..."
 	(cd ${homedir} && echo "${exlst}" | \
-		exclfind . 2>/dev/null | cpio -vpdmu ${DESTDIR}/home 2>&1) | \
+		exclfind . 2>/dev/null | cpio -vpdmu ${DESTDIR}/usr/home 2>&1) | \
 		show_extract $nfiles
-	rm -rf ${DESTDIR}/home/nomad/.config/DSB/dsblogoutmgr
-	unlink ${DESTDIR}/home/nomad/.cache
+	rm -rf ${DESTDIR}/usr/home/nomad/.config/DSB/dsblogoutmgr
+	unlink ${DESTDIR}/usr/home/nomad/.cache
 }
 
 copy_base() {
@@ -654,8 +665,6 @@ commit() {
 	fi
 	if [ ${fstype} = "ZFS" ]; then
 		echo zfs_load=\"YES\" >> ${DESTDIR}/boot/loader.conf
-		echo vfs.root.mountfrom=\"zfs:${NOMADBSDROOT}\" \
-			>> ${DESTDIR}/boot/loader.conf
 	fi
 	sysrc -f ${DESTDIR}/etc/rc.conf -x gsched_enable
 	sysrc -f ${DESTDIR}/etc/rc.conf -x local_startup
