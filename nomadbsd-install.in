@@ -320,6 +320,7 @@ wipe_disk() {
 mkefi() {
 	local disk=$1
 	local idx
+	local EFIDIR="BOOT"
 
 	gpart add -a 4k -t efi -l gpefiboot -s ${efipartsz} ${disk} || \
 		bail "Couldn't create EFI partition"
@@ -327,10 +328,10 @@ mkefi() {
 	newfs_msdos -F 32 -c 1 /dev/${disk}p${idx} || \
 		bail "Couldn't create MSDOSFS on /dev/${disk}p${idx}"
 	mount -t msdosfs /dev/${disk}p${idx} ${DESTDIR} || bail
-	mkdir -p ${DESTDIR}/EFI/NOMADBSD || \
-		bail "Couldn't create directory ${DESTDIR}/EFI/NOMADBSD"
-	cp /boot/boot1.efi ${DESTDIR}/EFI/NOMADBSD/BOOTx64.EFI || \
-		bail "Couldn't copy /boot/boot1.efi to ${DESTDIR}/EFI/NOMADBSD"
+	mkdir -p ${DESTDIR}/EFI/${EFIDIR} || \
+		bail "Couldn't create directory ${DESTDIR}/EFI/${EFIDIR}"
+	cp /boot/boot1.efi ${DESTDIR}/EFI/${EFIDIR}/BOOTx64.EFI || \
+		bail "Couldn't copy /boot/boot1.efi to ${DESTDIR}/EFI/${EFIDIR}"
 	# Use OEM string of HDD/SSD as UEFI variable label
 	oem=$(devlist | grep ${disk} | cut -d'|' -f 2)
 	if [ -z "${oem}" ]; then
@@ -351,7 +352,7 @@ mkefi() {
 		}
 	}
 	'
-	bvar=$(efibootmgr -c -l ${DESTDIR}/EFI/NOMADBSD/BOOTx64.EFI \
+	bvar=$(efibootmgr -c -l ${DESTDIR}/EFI/${EFIDIR}/BOOTx64.EFI \
 		-L "${efilabel}" | grep -w "${efilabel}" | sort | tail -1 | \
 		sed -E 's/.*Boot([0-9]+).*/\1/')
 	if [ -n "${bvar}" ]; then
