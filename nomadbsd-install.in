@@ -682,7 +682,11 @@ commit() {
 	rm -f ${DESTDIR}/usr/local/share/applications/nomadbsd-install-gui.desktop
 
 	set_autologin
-
+	# Enable suspend, hibernate, and hybrid sleep.
+	for s in suspend hibernate hybridsleep; do
+		cp "${DESTDIR}"/usr/local/lib/ConsoleKit/scripts/ck-system-$s.sample \
+		   "${DESTDIR}"/usr/local/lib/ConsoleKit/scripts/ck-system-$s
+	done
 	status "Updating pkg repository catalogues ..."
 	pkg --chroot ${DESTDIR} update -f -q 2>/dev/null
 
