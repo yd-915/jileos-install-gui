@@ -60,9 +60,9 @@ SDDM_AUTOLOGIN_END
 cleanup() {
 	! (mount | grep -q ${DESTDIR}) && return
 	if [ ${fstype} = "ZFS" ]; then
-		zfs umount -af
+		zpool export ${POOL} || zpool export -f ${POOL}
 	else
-		umount ${DESTDIR}
+		umount ${DESTDIR} || umount -f ${DESTDIR}
 	fi
 }
 
