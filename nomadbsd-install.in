@@ -32,6 +32,7 @@ rootfs_label="nbsdrootfs"
 swap_label="nbsdswap"
 POOL="zroot"
 PATH_SDDM_AUTOLOGIN="${DESTDIR}/usr/local/etc/sddm.conf.d/autologin.conf"
+LOGFILE="/root/nomadbsd-installer.$(date '+%Y-%m-%d_%H:%M:%S')"
 
 fstab_ufs() {
 cat <<FSTAB_END
@@ -57,6 +58,21 @@ Session=xinitrc
 SDDM_AUTOLOGIN_END
 }
 
+tee_logger()
+{
+	local logfile=$1
+	awk -v logfile="${logfile}" '{
+		if ($0 ~ /cpio: / || $0 ~ /^find: /) {
+			s = $0;
+			i = match(s, "cpio: ");
+			if (i != 0)
+				s = substr(s, i);
+			print s >> logfile;
+			print s > "/dev/stderr"
+		} else
+			print $0
+	}'
+}
 cleanup() {
 	! (mount | grep -q ${DESTDIR}) && return
 	if [ ${fstype} = "ZFS" ]; then
@@ -463,7 +479,7 @@ pkgwrp() {
 	if ! (mount | grep ${DESTDIR}/dev); then
 		chroot ${DESTDIR} sh -c 'mount -t devfs devfs /dev'
 	fi
-	pkg -c ${DESTDIR} $*
+	pkg -c ${DESTDIR} $* 2>> ${LOGFILE}
 	umount ${DESTDIR}/dev || umount -f ${DESTDIR}/dev
 }
 
@@ -562,8 +578,8 @@ copy_home() {
 			exclfind . 2>/dev/null | wc -l | tr -d ' ')
 	status "Copying files from ${homedir} ..."
 	(cd ${homedir} && echo "${exlst}" | \
-		exclfind . 2>/dev/null | cpio -vpdmu ${DESTDIR}/usr/home 2>&1) | \
-		show_extract $nfiles
+		exclfind . | cpio -vpdmu ${DESTDIR}/usr/home 2>&1) | \
+		tee_logger ${LOGFILE} | show_extract $nfiles
 	rm -rf ${DESTDIR}/usr/home/nomad/.config/DSB/dsblogoutmgr
 	unlink ${DESTDIR}/usr/home/nomad/.cache
 }
@@ -607,7 +623,8 @@ copy_base() {
 	nfiles=$(echo "${exlst}" | exclfind / 2>/dev/null | wc -l | tr -d ' ')
 	status "Copying files ..."
 	echo "${exlst}" | \
-		exclfind / 2>/dev/null | cpio -vpdmu ${DESTDIR} 2>&1 | show_extract $nfiles
+		exclfind / | cpio -vpdmu ${DESTDIR} 2>&1 | \
+		tee_logger ${LOGFILE} | show_extract $nfiles
 	cp -a /usr/local/share/applications/* ${DESTDIR}/usr/local/share/applications/
 	status "Creating ${DESTDIR}/dev ..."
 	mkdir ${DESTDIR}/dev
@@ -619,7 +636,7 @@ copy_base() {
 	mkdir ${DESTDIR}/tmp
 	chmod a=rwxt ${DESTDIR}/tmp
 	for i in ${pseudofs}; do
-		mkdir -p "${DESTDIR}/$i" >/dev/null 2>&1
+		mkdir -p "${DESTDIR}/$i" >/dev/null 2>> ${LOGFILE}
 	done
 	status "Replacing ${DESTDIR}/usr/local/etc by ${DESTDIR}/usr.local.etc ..."
 	unlink ${DESTDIR}/usr/local/etc
@@ -647,6 +664,7 @@ commit() {
 	if [ ! -d ${DESTDIR} ]; then
 		mkdir -p ${DESTDIR} || bail "Couldn't create ${DESTDIR}"
 	fi
+	echo "Log started on $(date)" > ${LOGFILE}
 	wipe_disk ${disk}
 	part_disk ${disk}
 	copy_base
@@ -688,7 +706,7 @@ commit() {
 		   "${DESTDIR}"/usr/local/lib/ConsoleKit/scripts/ck-system-$s
 	done
 	status "Updating pkg repository catalogues ..."
-	pkg --chroot ${DESTDIR} update -f -q 2>/dev/null
+	pkg --chroot ${DESTDIR} update -f -q 2>> ${LOGFILE}
 
 	status "Installing graphics driver"
 	install_gfxdrv
