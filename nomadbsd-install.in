@@ -346,7 +346,7 @@ mkefi() {
 	mount -t msdosfs /dev/${disk}p${idx} ${DESTDIR} || bail
 	mkdir -p ${DESTDIR}/EFI/${EFIDIR} || \
 		bail "Couldn't create directory ${DESTDIR}/EFI/${EFIDIR}"
-	cp /boot/boot1.efi ${DESTDIR}/EFI/${EFIDIR}/BOOTx64.EFI || \
+	cp /boot/loader.efi ${DESTDIR}/EFI/${EFIDIR}/BOOTx64.EFI || \
 		bail "Couldn't copy /boot/boot1.efi to ${DESTDIR}/EFI/${EFIDIR}"
 	# Use OEM string of HDD/SSD as UEFI variable label
 	oem=$(devlist | grep ${disk} | cut -d'|' -f 2)
