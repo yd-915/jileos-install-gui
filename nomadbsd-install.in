@@ -54,7 +54,7 @@ sddm_autologin_file() {
 	cat << SDDM_AUTOLOGIN_END
 [Autologin]
 User=${username}
-Session=xinitrc
+Session=xfce
 SDDM_AUTOLOGIN_END
 }
 
