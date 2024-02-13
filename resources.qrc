@@ -5,7 +5,7 @@
 	<file>locale/nomadbsd-install-gui_ru.qm</file>
 	<file>locale/nomadbsd-install-gui_cs.qm</file>
 	<file>locale/nomadbsd-install-gui_id.qm</file>
-	<file>images/logo.png</file>
+	<file>images/jile.png</file>
 </qresource>
 </RCC>
 
